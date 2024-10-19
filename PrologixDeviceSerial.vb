@@ -10,18 +10,19 @@ Namespace IODevices
 	'address format:  n:COMc:baudrate
 	'where n is the gpib address and c the COM port number
 	' e.g.  8:COM7:115000  for device at gpib addr.8, prologix board on COM7, configured for 115000 bauds
-	Public Structure ComInfo
-		public commportnum as integer
-		public shared  commport as SerialPort
-		public shared  numdevices As integer
-	End Structure
 
 	Public Class PrologixDeviceSerial
 		Inherits IODevice
-
-		Protected defaultreadtimeout As Integer = 100 'port read timeout, can be set short
+		Protected Structure ComInfo
+			Public COMportNum As Integer
+			Public COMport As SerialPort
+			Public NumDevices As Integer
+		End Structure
+		Protected MyPort As ComInfo
+		Protected Shared openPorts As New List(Of ComInfo)
+		Protected defaultreadtimeout As Integer = 1000 'port read timeout, can be set short
 		Protected defaultwritetimeout As Integer = 1000
-		Protected ComInfo As ComInfo
+		'		Protected ComInfo As ComInfo
 		'		Protected commport As SerialPort = Nothing
 		Protected commerr As String
 		'		Protected commportnum As Integer 'e.g. will be 3 for "COM3" etc.
@@ -40,13 +41,13 @@ Namespace IODevices
 				If Not _enableDataReceivedEvent AndAlso Value Then
 					delayread = 100
 					delayrereadontimeout = 100
-					AddHandler ComInfo.commport.DataReceived, New SerialDataReceivedEventHandler(AddressOf DataReceivedHandler)
+					AddHandler MyPort.COMport.DataReceived, New SerialDataReceivedEventHandler(AddressOf DataReceivedHandler)
 					_enableDataReceivedEvent = True
 				End If
 				If _enableDataReceivedEvent AndAlso Not Value Then
 					delayread = 10
 					delayrereadontimeout = 20
-					RemoveHandler ComInfo.commport.DataReceived, New SerialDataReceivedEventHandler(AddressOf DataReceivedHandler)
+					RemoveHandler MyPort.COMport.DataReceived, New SerialDataReceivedEventHandler(AddressOf DataReceivedHandler)
 					_enableDataReceivedEvent = False
 				End If
 			End Set
@@ -54,7 +55,7 @@ Namespace IODevices
 
 		'address format:  n:COMc:baudrate
 		'where n is the gpib address and c the COM port number
-		' e.g.  8:COM7:115000  for device at gpib addr.8, prologix board on COM7, configured for 115000 bauds
+		' e.g.  8:COM7:115200  for device at gpib addr.8, prologix board on COM7, configured for 115200 bauds
 
 		Public Sub New(name As String, addr As String)
 			MyBase.New(name, addr)
@@ -64,9 +65,9 @@ Namespace IODevices
 			OpenComm()
 
 			'configure EOI
-			ComInfo.commport.WriteLine("++eoi 1") 'append EOI
-			ComInfo.commport.WriteLine("++eot_enable 1")
-			ComInfo.commport.WriteLine("++eot_char 10") 'translate EOI to LF
+			MyPort.COMport.WriteLine("++eoi 1") 'append EOI
+			MyPort.COMport.WriteLine("++eot_enable 1")
+			MyPort.COMport.WriteLine("++eot_char 10") 'translate EOI to LF
 			interfacename = "Prologix Serial"
 
 			EnableDataReceivedEvent = True
@@ -74,7 +75,7 @@ Namespace IODevices
 			statusmsg = ""
 
 			'interface locking needed here (different threads talk to the same com port) 
-			interfacelockid = 25 + ComInfo.commportnum
+			interfacelockid = 25 + MyPort.COMportNum
 
 			AddToList()
 		End Sub
@@ -86,14 +87,20 @@ Namespace IODevices
 
 		Protected Overrides Sub DisposeDevice()
 			Try
-				ComInfo.commport.WriteLine("++addr " & gpibaddr & termstr & "++loc")
+				Dim removed As Boolean
+				MyPort.COMport.WriteLine("++addr " & gpibaddr & termstr & "++loc")
 				Thread.Sleep(500)
-				ComInfo.numdevices = ComInfo.numdevices - 1
-				If (ComInfo.numdevices = 0) Then
-					ComInfo.commport.Close()
+				MyPort.NumDevices = MyPort.NumDevices - 1
+				If (MyPort.NumDevices = 0) Then
+					MyPort.COMport.Close()
+					For Each rec In openPorts
+						If rec.COMportNum = MyPort.COMportNum Then
+							removed = openPorts.Remove(rec)
+							MyPort = Nothing
+						End If
+					Next
 				End If
-
-			Catch
+			Catch ex As Exception
 			End Try
 
 		End Sub
@@ -101,13 +108,13 @@ Namespace IODevices
 		Protected Overrides Function Send(cmd As String, ByRef errcode As Integer, ByRef errmsg As String) As Integer
 			'send cmd, return 0 if ok, 1 if timeout,  other if other error
 
-			ComInfo.commport.DiscardInBuffer()
+			MyPort.COMport.DiscardInBuffer()
 
 			Dim retval = 0
 
 			Try
-				ComInfo.commport.WriteLine("++addr " & gpibaddr) 'set address
-				ComInfo.commport.WriteLine(cmd)
+				MyPort.COMport.WriteLine("++addr " & gpibaddr) 'set address
+				MyPort.COMport.WriteLine(cmd)
 			Catch generatedExceptionName As TimeoutException
 				errcode = 1
 				errmsg = "write timeout"
@@ -128,7 +135,7 @@ Namespace IODevices
 		Protected Overrides Function PollMAV(ByRef mav As Boolean, ByRef statusbyte As Byte, ByRef errcode As Integer, ByRef errmsg As String) As Integer
 			'poll for status, return MAV bit 
 			'  return 0 if ok, 1 if timeout,  other if other error
-			ComInfo.commport.DiscardInBuffer()  'only input after ++read command is considered
+			MyPort.COMport.DiscardInBuffer()  'only input after ++read command is considered
 
 			Dim retval = 0
 
@@ -137,8 +144,8 @@ Namespace IODevices
 			mav = False
 
 			Try
-				ComInfo.commport.WriteLine(cmd)
-				resp = ComInfo.commport.ReadLine()
+				MyPort.COMport.WriteLine(cmd)
+				resp = MyPort.COMport.ReadLine()
 				statusbyte = Byte.Parse(resp)
 
 				mav = (statusbyte And MAVmask) <> 0
@@ -173,7 +180,7 @@ Namespace IODevices
 					Dim cmd As String
 					'					cmd = "++addr " & gpibaddr & termstr & "++read eoi" 'read until eoi or timeout
 					cmd = "++addr " & gpibaddr & termstr & "++read" 'read until eoi or timeout
-					ComInfo.commport.WriteLine(cmd)
+					MyPort.COMport.WriteLine(cmd)
 					readinitiated = True
 				Catch generatedExceptionName As TimeoutException
 					errcode = 1
@@ -188,7 +195,7 @@ Namespace IODevices
 
 			Try
 
-				respstr = ComInfo.commport.ReadLine() 'can timeout but should not cause error:
+				respstr = MyPort.COMport.ReadLine() 'can timeout but should not cause error:
 				'once read is initiated only reading will be retried on timeout 
 				' (then we can set short timeout on the COM port)
 
@@ -222,9 +229,9 @@ Namespace IODevices
 			Dim cmd As String = "++addr " & gpibaddr & termstr & "++clr "
 
 			Try
-				ComInfo.commport.WriteLine(cmd)
-				ComInfo.commport.DiscardOutBuffer()
-				ComInfo.commport.DiscardInBuffer()
+				MyPort.COMport.WriteLine(cmd)
+				MyPort.COMport.DiscardOutBuffer()
+				MyPort.COMport.DiscardInBuffer()
 				Return 0
 			Catch
 				errcode = -1
@@ -242,66 +249,74 @@ Namespace IODevices
 
 
 		Private Function OpenComm() As Integer
-
 			' return 0 if ok, -1 if error
-
+			Dim COMportNum As Integer
 			commerr = ""
-			'extract fields from devaddr:
+			'----- extract fields from devaddr: -----
 			Dim parr As String() = devaddr.ToUpper().Split(":".ToCharArray())
 			' e.g. "8:com1:9600"
 			gpibaddr = parr(0)
-			Dim commportname As String = parr(1)
+			Dim COMportName As String = parr(1)
 			baudrate = parr(2)
-
 			Try
-				ComInfo.commportnum = Integer.Parse(commportname.Remove(0, 3))
+				COMportNum = Integer.Parse(COMportName.Remove(0, 3))
 			Catch
-				Throw New Exception("invalid COM port specification: " & commportname)
+				Throw New Exception("invalid COM port specification: " & COMportName)
 			End Try
-			If (ComInfo.numdevices > 0) Then
-				ComInfo.numdevices = ComInfo.numdevices + 1
-				Return 0
-			End If
+			'----- search openPorts list for MyPort.COMportNum -----
+			MyPort = ComInfoByPort(COMportNum)
+			If MyPort.COMport Is Nothing Then
+				'----- MyPort not found in openPorts -----
+				MyPort.COMport = New SerialPort()
+				MyPort.COMportNum = COMportNum
+				MyPort.COMport.ReadBufferSize = 4096
+				'----- Apply settings -----
+				MyPort.COMport.BaudRate = Integer.Parse(baudrate)
+				MyPort.COMport.PortName = COMportName
+				MyPort.COMport.Parity = Parity.None
+				MyPort.COMport.StopBits = StopBits.One
+				MyPort.COMport.DataBits = 8
+				MyPort.COMport.NewLine = termstr 'LF, if modified then ++eot  should be updated too
+				MyPort.COMport.WriteTimeout = defaultwritetimeout
+				MyPort.COMport.ReadTimeout = defaultreadtimeout
+				' RTS/CTS handshaking as suggested for prologix, to check
+				MyPort.COMport.Handshake = Handshake.RequestToSend
+				MyPort.COMport.DtrEnable = True
 
-			If ComInfo.commport Is Nothing Then
-				ComInfo.commport = New SerialPort()
-				ComInfo.commport.ReadBufferSize = 4096
+				MyPort.COMport.Open()
+				' dont catch errors in constructor
+				MyPort.COMport.DiscardOutBuffer()
+				MyPort.COMport.DiscardInBuffer()
+				MyPort.NumDevices = 1
+				openPorts.Add(MyPort)
+				Return 0
 			Else
-				If ComInfo.commport.IsOpen Then
-					Try
-						ComInfo.commport.Close()
-					Catch ex As Exception
-						commerr = ex.Message
-						Return -1
-					End Try
+				If (MyPort.NumDevices > 0) Then
+					'----- Add 1 device to MyPort -----
+					MyPort.NumDevices = MyPort.NumDevices + 1
+					For Each rec In openPorts
+						If rec.COMportNum = MyPort.COMportNum Then
+							rec.NumDevices = MyPort.NumDevices
+						End If
+					Next
+					Return 0
 				End If
 			End If
-
-
-			'settings
-			ComInfo.commport.BaudRate = Integer.Parse(baudrate)
-			ComInfo.commport.PortName = commportname
-
-			ComInfo.commport.Parity = Parity.None
-			ComInfo.commport.StopBits = StopBits.One
-			ComInfo.commport.DataBits = 8
-			ComInfo.commport.NewLine = termstr 'LF, if modified then ++eot  should be updated too
-			ComInfo.commport.WriteTimeout = defaultreadtimeout
-			ComInfo.commport.ReadTimeout = defaultwritetimeout
-
-			' RTS/CTS handshaking as suggested for prologix, to check
-			ComInfo.commport.Handshake = Handshake.RequestToSend
-			ComInfo.commport.DtrEnable = True
-
-			ComInfo.commport.Open()
-			' dont catch errors in constructor
-
-			ComInfo.commport.DiscardOutBuffer()
-			ComInfo.commport.DiscardInBuffer()
-
-			Return 0
 		End Function
 
+		'----- find ComInfo in openPorts list using COMportNum -----
+		Private Shared Function ComInfoByPort(ByVal Num As Integer) As ComInfo
+			If openPorts Is Nothing Then
+				Return Nothing
+			End If
+			For Each Port As ComInfo In openPorts
+				If Port.COMportNum = Num Then
+					Return Port
+				End If
+			Next
+			Return Nothing
+		End Function
+		'----------------------------------------------------------------------
 	End Class
 
 End Namespace
