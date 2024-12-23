@@ -5,6 +5,7 @@ Imports System.Text
 Imports System.IO.Ports
 
 
+
 Namespace IODevices
 	'NI based on SerialDevice code
 	'address format:  n:COMc:baudrate
