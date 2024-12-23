@@ -243,6 +243,7 @@ Namespace IODevices
         'if true serial poll before reading to not to block bus
         Public enablepoll As Boolean
         Public MAVmask As Byte = 16  'for GPIB, USBTMC-USB488, VXI-11: standard (488.2) mask for MAV status (bit 5 of the status byte), change it for devices not compliant with 488.2 
+        Public MAVmaskGBIP232CTA As Byte = 128  'for GPIB, USBTMC-USB488, VXI-11: standard (488.2) mask for MAV status (bit 5 of the status byte), change it for devices not compliant with 488.2 
 
         'remove crlf in ByteArrayToString function 
         Public stripcrlf As Boolean

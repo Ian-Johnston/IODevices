@@ -80,6 +80,7 @@
     <Compile Include="DevicesForm.vb">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="GPIB232CTA.vb" />
     <Compile Include="GPIBDevice_ADLink.vb" />
     <Compile Include="GPIBDevice_gpib488.vb" />
     <Compile Include="IOdevice.vb" />
