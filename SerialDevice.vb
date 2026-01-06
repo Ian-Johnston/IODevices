@@ -11,6 +11,9 @@ Namespace IODevices
     Public Class SerialDevice
         Inherits IODevice
 
+        Public Shared Property SerialCOMDTREnable As Boolean = True       ' now set from WinGPIB app
+        Public Shared Property SerialCOMRTSEnable As Boolean = True       ' now set from WinGPIB app
+
         Protected defaultreadtimeout As Integer = 5          'port read timeout should be set to short value 
 
         Protected defaultwritetimeout As Integer = 1000
@@ -320,7 +323,7 @@ Namespace IODevices
                 End Select
             End If
 
-            'exemple "COM1:9600,N,8,2"  -> "com1",9600,Parity.None,8, stopbits.Two
+            'example "COM1:9600,N,8,2"  -> "com1",9600,Parity.None,8, stopbits.Two
 
             commport.WriteTimeout = defaultwritetimeout
             commport.ReadTimeout = defaultreadtimeout
@@ -330,8 +333,11 @@ Namespace IODevices
 
 
             'added in 2020
-            commport.DtrEnable = True
-            commport.RtsEnable = True
+            'commport.DtrEnable = True
+            'commport.RtsEnable = True
+            commport.DtrEnable = SerialCOMDTREnable     ' set from WinGPIB
+            commport.RtsEnable = SerialCOMRTSEnable     ' set from WinGPIB
+
             commport.DiscardOutBuffer()
             commport.DiscardInBuffer()
             Return 0

@@ -13,6 +13,9 @@ Namespace IODevices
 
 	Public Class PrologixDeviceSerial
 		Inherits IODevice
+
+		Public Shared Property PrologixSerialDTREnable As Boolean = True       ' now set from WinGPIB app
+
 		Protected Structure ComInfo
 			Public COMportNum As Integer
 			Public COMport As SerialPort
@@ -281,7 +284,9 @@ Namespace IODevices
 				MyPort.COMport.ReadTimeout = defaultreadtimeout
 				' RTS/CTS handshaking as suggested for prologix, to check
 				MyPort.COMport.Handshake = Handshake.RequestToSend
-				MyPort.COMport.DtrEnable = True
+
+				' MyPort.COMport.DtrEnable = True
+				MyPort.COMport.DtrEnable = PrologixSerialDTREnable     ' set from WinGPIB
 
 				MyPort.COMport.Open()
 				' dont catch errors in constructor
