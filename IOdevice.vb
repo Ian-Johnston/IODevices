@@ -489,6 +489,15 @@ Namespace IODevices
                     ' Set the location of the form
                     devform.StartPosition = FormStartPosition.Manual
                     devform.Location = New Point(x, y)
+
+
+                    ' Make the main window the owner so it moves together
+                    Dim ownerForm As Form = Form.FromHandle(mainWindowHandle)
+                    If ownerForm IsNot Nothing AndAlso Not ownerForm.IsDisposed Then
+                        ownerForm.AddOwnedForm(devform)      ' NEW
+                    End If
+
+
                 End If
 
                 ' Ensure form is shown and brought to the front

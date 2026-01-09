@@ -1,12 +1,11 @@
 ﻿Imports IODevices
+
+
 Namespace IODeviceForms  'internal namespace (used within assembly to access devices and message forms)
 
     Friend Class DevicesForm
 
-
         Private enableupdate As Boolean = True
-
-
 
         Private Sub updatelist()
 
