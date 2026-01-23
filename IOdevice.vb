@@ -275,6 +275,13 @@ Namespace IODevices
             End Set
         End Property
 
+
+        ' Ability for main WinGPIB app to clear async queue - IanJ
+        'Public Sub AbortAll()
+        '    AbortAllTasks()
+        'End Sub
+
+
         '*****************    private IODevice variables        *********************************************************
         '   
 
