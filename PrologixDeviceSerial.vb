@@ -71,6 +71,9 @@ Namespace IODevices
 			MyPort.COMport.WriteLine("++eoi 1") 'append EOI
 			MyPort.COMport.WriteLine("++eot_enable 1")
 			MyPort.COMport.WriteLine("++eot_char 10") 'translate EOI to LF
+
+			MyPort.COMport.Encoding = Encoding.Default 'overwrite standard "ASCII"			' To send addresses larger than 127 through the Prologix interface (3478A)
+
 			interfacename = "Prologix Serial"
 
 			EnableDataReceivedEvent = True
@@ -202,7 +205,8 @@ Namespace IODevices
 				'once read is initiated only reading will be retried on timeout 
 				' (then we can set short timeout on the COM port)
 
-				arr = System.Text.Encoding.ASCII.GetBytes(respstr)
+				'arr = System.Text.Encoding.ASCII.GetBytes(respstr)
+				arr = System.Text.Encoding.Default.GetBytes(respstr)          ' To send addresses larger than 127 through the Prologix interface (3478A)
 
 				EOI = True   'EOI translated to end of line
 
